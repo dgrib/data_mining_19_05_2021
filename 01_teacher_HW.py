@@ -56,7 +56,7 @@ class Parse5ka:
 
 class CategoriesParser(Parse5ka):
 
-    def __init__(self, categories_url, *args, **kwargs):
+    def __init__(self, categories_url, *args, **kwargs):  # args kwargs для передачи агрументов инициализации родителя start_url, save_path: Path
         self.categories_url = categories_url
         super().__init__(*args, **kwargs)
 
