@@ -28,6 +28,7 @@ class GdBlogParse:
         self.tasks = []  # нужна очередь задачь,
         # в питоне конечно есть очереди и они позволяют быстро делать fifo or filo, но мы сделаем упрощенно на списке,
         # это неправильно в продашне, но в целом можно и так
+        self.tasks_creator({self.start_url, }, self.parse_feed)  # создаем первую задачу, даем set url-ов и ф-ю обработки
 
     def _get_response(self, url):  # хочу чтобы глобально не делались запросы чаще определенного времени,
                 # чаще чем это делается через delay,
@@ -45,6 +46,7 @@ class GdBlogParse:
                 # если мы слишкоим быстро сделаем запрос, тоесть next_time > time.time() - то условие if нас сдержит
                 # и уснет на разницу next_time - time.time()
             response = requests.get(url, headers=self.headers)
+            print(f"RESPONSE: {response.url}")
             self._parse_time = time.time()  # фиксируем _parse_time после запроса, для задержки потом в if
     # респонз может обрабатываться и 5-10 секунд.Если просто задержку поставить то будет всегда задержка,
             # а с подсчетом как тут, более эффективно расходуется время, так как пауза будет только в том случае,
@@ -69,7 +71,7 @@ class GdBlogParse:
 
     def tasks_creator(self, urls: set, callback: typing.Callable):  # ничего не возвращаем
         # нужно вычислить те url которые обработаны и удалить из списка url и после этого насоздавать задач
-        urls_set = urls - self.done_urls  # вычитаем мноджества, удаляем дубли и оставляем уникальные для обоих
+        urls_set = urls - self.done_urls  # вычитаем мноджества, оставляем urls которые не входят в done_urls
         for url in urls_set:
             self.tasks.append(
                 self.get_task(url, callback)
@@ -79,11 +81,13 @@ class GdBlogParse:
 
 
     def run(self):  # будет просто запускать цикл
-        # как ссылки извоекать? создадим первую задачу - это можно сджелать в разных местах (в ините можно, тут можно)
-        self.tasks.append(self.get_task(self.start_url, self.parse_feed))  # старт url будет обрабатываться feed
-        # результат работы get_task это ф-я task !!!!!!
-        # для определенной task существует в ее области видимости url и метод (в даннном случае parse_feed)
-        self.done_urls.add(self.start_url)  # если задача поставлена - url утилизирован
+        # # как ссылки извоекать? создадим первую задачу - это можно сджелать в разных местах (в ините можно, тут можно)
+        # self.tasks.append(self.get_task(self.start_url, self.parse_feed))  # старт url будет обрабатываться feed
+        # # результат работы get_task это ф-я task !!!!!!
+        # # для определенной task существует в ее области видимости url и метод (в даннном случае parse_feed)
+        # self.done_urls.add(self.start_url)  # если задача поставлена - url утилизирован
+        # потом вынесли верхнее в инит, но в tasks_creator - и run стыл чистый
+
         while True:
             try:
                 task = self.tasks.pop(0)  # извлекаем из очережи задачу под 0 индексом,
@@ -116,18 +120,49 @@ class GdBlogParse:
             urljoin(response.url, itm.attrs.get('href')) for itm in ul_pagination.find_all('a') if itm.attrs.get('href')
         )
         # itm.attrs.get('href') for itm in ul_pagination.find_all('a') if itm.attrs.get('href') - было так
-        # {'/posts?page=2', '/posts?page=3', '/posts?page=57'}
+        # {'/posts?page=2', '/posts?page=3', '/posts?page=57'} а стали полные ссылки
+
         # щас нам нужно породить задачу, у нас относительбные url в pagination_links
         self.tasks_creator(pagination_links, self.parse_feed)
-        print(1)
+        post_wrapper = soup.find("div", attrs={"class": "post-items-wrapper"})
+        post_links = set(
+            urljoin(response.url, itm.attrs.get('href'))
+            for itm in post_wrapper.find_all("a", attrs={"class": "post-item__title"})
+            if itm.attrs.get('href')
+        )
+        self.tasks_creator(post_links, self.parse_post)
+
+        # можно так заменить верхнее, post_links убрать, но такой код сложне некоторым читать
+        # self.tasks_creator(
+        #     set(
+        #         urljoin(response.url, itm.attrs.get('href'))
+        #         for itm in post_wrapper.find_all("a", attrs={"class": "post-item__title"})
+        #         if itm.attrs.get('href')
+        #     ),
+        #     self.parse_post
+        # )
 
     def parse_post(self, response: requests.Response):  # долджен обрадатывать страницу поста и извлекать из него данные
-        pass
+        soup = bs4.BeautifulSoup(response.text, 'lxml')
+        author_name_tag = soup.find('div', attrs={"itemprop": "author"})
+        data = {
+            'url': response.url,
+            "title": soup.find('h1', attrs={'class': 'blogpost-title'}).text,  # делали в консоли, из soup... при дебаге
+            # хотим имя автора и ссылку на автора
+            "author": {
+                'url': urljoin(response.url, author_name_tag.parent.attrs['href']),
+                'name': author_name_tag.text
+            }
+            # обработку более сложных структур можно вынести в отдельные методы
+        }
+        self._save(data)
 
+    def _save(self, data: dict):
+        print(1)
 
 
 if __name__ == '__main__':
     parser = GdBlogParse('https://gb.ru/posts')
     parser.run()
 
-    # 1.30
+# инсталлируем монго на комп
