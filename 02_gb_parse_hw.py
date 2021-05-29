@@ -79,6 +79,7 @@ class GdBlogParse:
     def parse_post(self, response: requests.Response):
         soup = bs4.BeautifulSoup(response.text, 'lxml')
         author_name_tag = soup.find('div', attrs={"itemprop": "author"})
+        commentable_id = soup.find("comments").attrs['commentable-id']
         data = {
             'url': response.url,
             "title": soup.find('h1', attrs={'class': 'blogpost-title'}).text,
@@ -89,30 +90,30 @@ class GdBlogParse:
             "author": {
                 'url': urljoin(response.url, author_name_tag.parent.attrs['href']),
                 'name': author_name_tag.text
-            }
+            },
+            "comments": self._get_comments(commentable_id)
         }
         self._save(data)
 
-
-
-    """
-        #    url страницы материала
-        #    Заголовок материала
-        #    Первое изображение материала (Ссылка)
-        #    Дата публикации (в формате datetime)
-        #    имя автора материала
-        #    ссылка на страницу автора материала
-        комментарии в виде (автор комментария и текст комментария)
-    """
+    def _get_comments(self, commentable_id) -> dict:
+        """Формирует словарь комментариев."""
+        response = requests.get(comment_url, params={"commentable_type": "Post", "commentable_id": commentable_id})
+        comment_idx = 1
+        comments_dict = {}
+        for comment in response.json():
+            comments_dict[f'{comment_idx}_comment_author'] = comment.get('comment')['user']['full_name']
+            comments_dict[f'{comment_idx}_comment_content'] = comment.get('comment')['body']
+            comment_idx += 1
+        return comments_dict
 
     def _save(self, data: dict):
         collection = self.db["gb_blog_parse"]
         collection.insert_one(data)
-        print(1)
 
 
 if __name__ == '__main__':
     client_db = pymongo.MongoClient()
     db = client_db['db_parse_19_05']
+    comment_url = 'https://gb.ru/api/v2/comments'
     parser = GdBlogParse('https://gb.ru/posts', db)
     parser.run()
