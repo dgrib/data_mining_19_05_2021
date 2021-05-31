@@ -74,6 +74,7 @@ class Database:
         # тоесть открывается соединение и происходит магия ORM
         post = self.get_or_create(session, models.Post, "id", data['post_data'])
         author = self.get_or_create(session, models.Author, "url", data['author_data'])
+        tag = self.get_or_create(session, models.Tag, "url", data['tag_data'])
         # получаем post и автора, теперь их нао связать вместе
         post.author = author
         session.add(post)

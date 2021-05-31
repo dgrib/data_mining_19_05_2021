@@ -13,7 +13,8 @@ from sqlalchemy import (
     # используем слой абстракции чтобы пистаь одно а в разные типы бд ходить sqlite postgres и тд,
     # будет знать как обращяться к этим объектам чтобы это было корректно
     String,
-    ForeignKey
+    ForeignKey,
+    Table
 )
 
 # опишем базовую структуру поста , что она имеет
@@ -47,6 +48,7 @@ class Post(Base):
     # backref='posts' означает что у экземплчяра класса Автор появится атрибут posts,
     # обращение к которому будет отдавать список экземпляров класса Post, которые связаны с этим автором
     # можно было в Автор сделать relationship, но зачем если можно backref сделать - обратная связь
+    tags = relationship('Tag', secondary='post_tag', backref='posts')
 
 
 class Author(Base):  # будем хранить автора
@@ -58,6 +60,35 @@ class Author(Base):  # будем хранить автора
     # записи мб с одинаковыми title поэтому unique=False
 
 
+class Tag(Base):
+    __tablename__ = 'tag'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    url = Column(String(2048), nullable=False, unique=True)
+    name = Column(String(2048), nullable=False, unique=False)  # пусть будет как Author, уникальный только url
+    posts = relationship('Post', secondary='post_tag', backref='tags')
+
+
+# должны быть без id, иначе в один пост сможет войти несколько одинаковых тегов
+PostTag = Table('post_tag', Base.metadata,
+                # Column('id', Integer, primary_key=True),
+                Column('post_id', Integer, ForeignKey('Post.id')),
+                Column('tag_id', Integer, ForeignKey('Tag.id')),
+                )
+
+
+# association_table = Table('association',
+#     Column('left_id', Integer, ForeignKey('left.id')),
+#     Column('right_id', Integer, ForeignKey('right.id'))
+# )
+# class Parent(Base):
+#     __tablename__ = 'left'
+#     id = Column(Integer, primary_key=True)
+#     children = relationship("Child", secondary=association_table, back_populates="parents")
+#
+# class Child(Base):
+#     __tablename__ = 'right'
+#     id = Column(Integer, primary_key=True)
+#     parents = relationship("Parent", secondary=association_table, back_populates="children")
 
 
 
