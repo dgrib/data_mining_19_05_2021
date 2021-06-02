@@ -48,7 +48,7 @@ class Post(Base):
     # backref='posts' означает что у экземплчяра класса Автор появится атрибут posts,
     # обращение к которому будет отдавать список экземпляров класса Post, которые связаны с этим автором
     # можно было в Автор сделать relationship, но зачем если можно backref сделать - обратная связь
-    tags = relationship('Tag', secondary='post_tag', backref='posts')
+    # tags = relationship('Tag', secondary='post_tag', backref='posts')
 
 
 class Author(Base):  # будем хранить автора
@@ -65,15 +65,15 @@ class Tag(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     url = Column(String(2048), nullable=False, unique=True)
     name = Column(String(2048), nullable=False, unique=False)  # пусть будет как Author, уникальный только url
-    posts = relationship('Post', secondary='post_tag', backref='tags')
+    # posts = relationship('Post', secondary='post_tag', backref='tags')
 
 
 # должны быть без id, иначе в один пост сможет войти несколько одинаковых тегов
-PostTag = Table('post_tag', Base.metadata,
-                # Column('id', Integer, primary_key=True),
-                Column('post_id', Integer, ForeignKey('Post.id')),
-                Column('tag_id', Integer, ForeignKey('Tag.id')),
-                )
+# PostTag = Table('post_tag', Base.metadata,
+#                 # Column('id', Integer, primary_key=True),
+#                 Column('post_id', Integer, ForeignKey('Post.id')),
+#                 Column('tag_id', Integer, ForeignKey('Tag.id')),
+#                 )
 
 
 # association_table = Table('association',
