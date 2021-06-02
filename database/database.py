@@ -1,117 +1,60 @@
-# класс для взаимодействия с БД которую описали в models
-# нужно установить соединение с БД, если такой нет - создать ее
-# и корнтролировать сессию соединения, так как когда мы работает с скл мы открываем сессию соединения,
-# после чего мы можем взаимодействовать с бд, с монго было проще,
-# а тут должны контролировать как транзакции так и время соединения
-from sqlalchemy import create_engine, or_  # or можно использовать в запросах query()
-# создает движок соединения, принимает в себя строку юрл к бд, и создаст корректное соединение с бд,
-# плюс ко всем мы в наш базовый класс сможем кинуть движок, таким образом, чтобы правильно замапливалась типизация
+from sqlalchemy import create_engine, or_
 from sqlalchemy.orm import sessionmaker
-# чтобы открывать соединение с бд и закрывать ее когда закончили работать, нельзя оставлять подвешенную сессию,
-# надо явно ее закрыть, экземпляр класса сессии не поддерживает контекстный менеджер,
-from . import models  # импортируем модели
+from . import models
 
 
 class Database:
 
-    def __init__(self, db_url):  # передаем юрл бд
-        engine = create_engine(db_url)  # говорим что нам надо сделать криейтэнджин лоя этого юрл
-        # он больше нигде в классе не пригодится, он объяавляется,
-        # используется и потом больше не используется сам объект engine
+    def __init__(self, db_url):
+        engine = create_engine(db_url)
         models.Base.metadata.create_all(bind=engine)
-        # обратимся к моделям , таким образом в базовый класс прокидывается наш движок, а метод create_all говорит,
-        # чтонужно создать эту бд, так как объект Base знает кто от него унаследовался,
-        # он знает какие таблицы с какмими атрибутами должны существовать,
-        # и если бд не сущ то он ее создаст пл указанному юрл
         self.maker = sessionmaker(bind=engine)
-        # таким образом мы создаем колабл объект maker вызывая который мы будем получать экземпляр класса сессии
-        # maker становится подготовленной фаборикой для сессии
 
     def get_or_create(self, session, model, filter_field, data):
-        # прежде чем создавать экз класса (post, author - не важно)
-        # спросим у бд, а есть ли у теяб уже такая запись, если да то берем из бд, нет - то создаем,
-        # при таком варианте мы всегда имеем актуальный инстанс данных, мы не пытаемся никогнда задублировать данные в базу
-        # чтобы делать запросы нас надо передавать сюда сессию, модель чтобы знать к какой таблице обращаемся,
-        # надо знать по какому полю проверяем уникальность, и данные -
-        # этот набор надо передать чтобы бд понимала как мы запрашиваем и откуда мы запрашиваем
         instance = session.query(model).filter_by(**{filter_field: data[filter_field]}).first()
         # instance = session.query(model).filter(
-        #     getattr(model, filter_field) == data[filter_field]).first()  # еще способ
-        # запрашиваем model,
-        # это один из классов Post или Author (не экземпляров, а именно классов)
-        # мы говорим что составляем query запрос
-        # есть 2 подхода filter принимает указатель на field -
-        # указать надо filter(model.атрибут какой этой модели фильтруете)
-        # filter_by принимает именнованый аргумент
-        # .first() - первый, .all() - все, .order("имя поля по которому делаем порядок")
-        # если нуен последний то сортировку добавьте по тому что нужно,так как по дефолту сортировка по мере добавления
-        # order(-id) в обратном направлении по id
-
-        # # интерфейс взаимодействия с сессией: !!!!!!!!!
-        # session.query(models.Post).all()
-        # model.Post - эта таблица с которой хотим взаимодействовать,
-        # .all() - получаем список всех постов, которые есть в бд
-        # фильтрация !!!!!!
-        # session.query(models.Post).filter(models.Post.id >= 1000).all() сравнение нужно
-        # session.query(models.Post).filter(models.Post.id >= 1000 or ...).all()
-        # втрой интерфейс фильтрации !!!!!!
-        # session.query(models.Post).filter_by(id=2563).all() тут не сравнение а передаем конкретный
-        # классически еще можно так
-        # session.query(models.Post).filter(models.Post.id.in_([2362, 4523])).all()
-        # выдаст все элеименты с id из списка
-        # или так session.query(models.Post).filter(getattr(model, filter_field) == data[filter_field]).all()
-
-        # пока не сделали first или all - запрос в базу не уходит, сама алхимия составляет запрос SELECT ....
-
-        # в случае если под критерий фильтрации ничего не подойдет - instance будет равен None
+        #     getattr(model, filter_field) == data[filter_field]).first()  # можно так
         if not instance:
-            instance = model(**data)  # то создаем, а в модель пришла ссылка на класс (Post) создаем этот пост,
-                                        # возвращаем и post появился, так же автора проверяем
+            instance = model(**data)
         return instance
 
-    def add_post(self, data):  # создадим интерфейс, передадим всю структуру данных
-        session = self.maker()  # откроем сессию, вызов() maker, получаем экз класса сессии sessionmaker,
-        # тоесть открывается соединение и происходит магия ORM
+    def add_post(self, data):
+        session = self.maker()
         post = self.get_or_create(session, models.Post, "id", data['post_data'])
-        author = self.get_or_create(session, models.Author, "url", data['author_data'])
-
-        # получаем post и автора, теперь их нао связать вместе
-        post.author = author
+        post.author = self.get_or_create(session, models.Author, "url", data['author_data'])
 
         for itm in data['tags_data']:
-            tag = self.get_or_create(session, models.Tag, "url", itm)
-            tag.posts = post
-            post.tags = tag
-            session.add(tag, post)
+            post.tags.append(self.get_or_create(session, models.Tag, "url", itm))
+
+        # post.tags.extend(map(
+        #     lambda tag_data: self.get_or_create(session, models.Tag, "url", tag_data),
+        #     data['tags_data'],
+        # ))  # так тоже можно
+
         session.add(post)
         try:
             session.commit()
-        except Exception: # некрасиво так как мы все эксепшны ьбудем ловить
-            session.rollback()  # очистка сессии, откат, если ошибка,
-                                # чтобы эта ошибка снова не летела сюда со следующими вставками в базу
+        except Exception:
+            session.rollback()
         finally:
             session.close()
-        print(1)
-        # проверки на тип не случтилось, так как сам класс не проверяет, а баз апроверяет тип
+        self.create_comments(data["post_data"]["id"], data['comments_data'])
 
+    def create_comments(self, post_id, data):
+        session = self.maker()
+        try:
+            comment = data.pop(0)
+        except IndexError:
+            break
+        author = self.get_or_create(
+            session,
+            models.Author,
+            'url',
+            dict(
+                name = comment['comment']['user']['full_name'],
+                url = comment['comment']['user']['url'],
+                gb_id = comment['comment']['user']['id'],
+            )
+        )
 
-# когда сесси открыта можем дописывать автора
-# post = models.Post(**data['post_data'])
-# author = models.Author(**data['author_data'])
-# post.author = author
-
-# Но чтобы записать надо add добавить в сессию что хотите записать
-# session.add(post)
-# но записи в базу еще не случилось, так как сессию надо закоммитить, в рамках работы можно добавлять все что угодно,
-# но скл это все илди ничего, сделаем session.commit(), но если бы 1 из 15 постов была ошибка, то 15 недобавилось бы
-# если такая ошибка есть, тьнадо делать rollback или ремонтировать сессию,
-# например изменчяете объект и снова пишете, если не можете изменить то надо почистить сессию,
-# так как все что не закомичено юудет лететь, это как с гитом (надо очистить очередь)
-
-# если прилетает новый автор , то появляется проблема уникальности, с постами все ок, так как есть id
-# база выкинет эксепшн если прилетит такой же автор (с одинаковым юрл) у следующегно поста
-# и  тут концепция get-or-create,
-
-# author.posts обращаясь к экземпляру автора, можно смотреть все его посты через атрибут posts
-# author.posts[0].title
 
