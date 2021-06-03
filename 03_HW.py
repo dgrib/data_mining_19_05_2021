@@ -30,8 +30,11 @@ class GbBlogParse:
             response = requests.get(url, headers=self.headers)
             print(f"RESPONSE: {response.url}")
             self.__parse_time = time.time()
-            if response.status_code == 200:
+            if response.status_code in (200, 206):
                 return response
+            # elif response.status_code == 206:
+                # в браузере прибавлял к url (&content-range=0-9/19) и (&content-range=10-19/19)
+                # не смог получить 2 разных json-а комментариев, чтобы объединить комментарии и вернуть одним json
 
     def get_task(self, url: str, callback: typing.Callable) -> typing.Callable:
         def task():

@@ -25,10 +25,10 @@ class Post(Base):
     __tablename__ = 'post'
     id = Column(Integer, primary_key=True, unique=True, nullable=False)
     url = Column(String(2048), nullable=False, unique=True)
-    title = Column(String, nullable=True, unique=False)
+    title = Column(String, nullable=False, unique=False)
     author_id = Column(Integer, ForeignKey("author.id"), nullable=False)
     author = relationship("Author", backref='posts')  # это не колонка !!!!! физически в базе этого не будет
-    tags = relationship('Tag', secondary='post_tag', backref='posts')
+    tags = relationship('Tag', secondary=post_tag, backref='posts')
 
 
 class Author(Base):
@@ -61,15 +61,15 @@ class Comment(Base):
     post_id = Column(Integer, ForeignKey('post.id'))
     post = relationship(Post, backref='comments')
 
-    def __init__(self, kwargs):
-        self.id = kwargs['id']
-        self.parent_id = kwargs['parent_id']
-        self.likes_count = kwargs['likes_count']
-        self.body = kwargs['body']
-        self.created_at = datetime.datetime.fromisoformat(kwargs['created_at'])
-        self.hidden = kwargs['hidden']
-        self.deep = kwargs['deep']
-
+    def __init__(self, **kwargs):
+        self.id = kwargs["id"]
+        self.parent_id = kwargs["parent_id"]
+        self.likes_count = kwargs["likes_count"]
+        self.body = kwargs["body"]
+        self.created_at = datetime.datetime.fromisoformat(kwargs["created_at"])
+        self.hidden = kwargs["hidden"]
+        self.deep = kwargs["deep"]
+        self.time_now = datetime.datetime.fromisoformat(kwargs["time_now"])
 
 
 

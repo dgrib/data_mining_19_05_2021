@@ -42,19 +42,32 @@ class Database:
 
     def create_comments(self, post_id, data):
         session = self.maker()
-        try:
-            comment = data.pop(0)
-        except IndexError:
-            break
-        author = self.get_or_create(
-            session,
-            models.Author,
-            'url',
-            dict(
-                name = comment['comment']['user']['full_name'],
-                url = comment['comment']['user']['url'],
-                gb_id = comment['comment']['user']['id'],
+        while True:
+            try:
+                comment = data.pop(0)
+            except IndexError:
+                break
+            author = self.get_or_create(
+                session,
+                models.Author,
+                "url",
+                dict(
+                    name=comment["comment"]["user"]["full_name"],
+                    url=comment["comment"]["user"]["url"],
+                    gb_id=comment["comment"]["user"]["id"]),
             )
-        )
-
-
+            if not author.gb_id:
+                author.gb_id = comment["comment"]["user"]["id"]
+            comment_db = self.get_or_create(
+                session, models.Comment, "id", comment["comment"],
+            )
+            comment_db.author = author
+            comment_db.post_id = post_id
+            session.add(comment_db)
+            try:
+                session.commit()
+            except Exception:
+                session.rollback()
+            if comment["comment"]["children"]:
+                data.extend(comment["comment"]["children"])
+        session.close()
