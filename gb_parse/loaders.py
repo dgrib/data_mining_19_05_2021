@@ -2,6 +2,7 @@ from urllib.parse import urljoin
 from scrapy import Selector
 from scrapy.loader import ItemLoader
 from itemloaders.processors import TakeFirst, MapCompose
+from gb_parse.spiders.hh_spider.hh_prosessors import flat_text, hh_user_url
 
 
 def clear_price(price: str) -> float:
