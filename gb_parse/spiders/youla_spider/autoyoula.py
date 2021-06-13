@@ -1,7 +1,7 @@
 import pymongo
 import scrapy
 from .xpath_selectors import BRANDS, CARS, PAGINATION, CAR_DATA
-from gb_parse.loaders import AutoyoulaLoader
+from .loaders import AutoyoulaLoader
 
 
 class AutoyoulaSpider(scrapy.Spider):
