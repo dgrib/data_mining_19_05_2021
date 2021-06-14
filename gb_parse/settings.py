@@ -27,7 +27,7 @@ ROBOTSTXT_OBEY = False
 # Configure a delay for requests for the same website (default: 0)
 # See https://docs.scrapy.org/en/latest/topics/settings.html#download-delay
 # See also autothrottle settings and docs
-DOWNLOAD_DELAY = 0.2
+DOWNLOAD_DELAY = 3
 # The download delay setting will honor only one of:
 # CONCURRENT_REQUESTS_PER_DOMAIN = 16
 # CONCURRENT_REQUESTS_PER_IP = 16
@@ -52,15 +52,15 @@ DEFAULT_REQUEST_HEADERS = {
 
 # Enable or disable downloader middlewares
 # See https://docs.scrapy.org/en/latest/topics/downloader-middleware.html
-DOWNLOADER_MIDDLEWARES = {
+# DOWNLOADER_MIDDLEWARES = {
     # 'gb_parse.middlewares.GbParseDownloaderMiddleware': 543,
-    'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
-    'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
+    # 'rotating_proxies.middlewares.RotatingProxyMiddleware': 610,
+    # 'rotating_proxies.middlewares.BanDetectionMiddleware': 620,
     # по дефолту у него примитивное определение что у вас бана, можно переопределить в доках
     # settings.py
     # ROTATING_PROXY_BAN_POLICY = 'myproject.policy.MyBanPolicy'
-
-}
+#
+# }
 
 # Enable or disable extensions
 # See https://docs.scrapy.org/en/latest/topics/extensions.html
@@ -73,7 +73,7 @@ DOWNLOADER_MIDDLEWARES = {
 ITEM_PIPELINES = {
     # 'gb_parse.pipelines.GbParsePipeline': 300,  # этоприоритет, чем легче тем выше приоритет
     'gb_parse.pipelines.GbMongoPipeline': 400,
-    'gb_parse.pipelines.GbImageDownloadPipeline': 300,
+    # 'gb_parse.pipelines.GbImageDownloadPipeline': 300,
 
 }
 
@@ -98,5 +98,5 @@ AUTOTHROTTLE_DEBUG = True
 # HTTPCACHE_IGNORE_HTTP_CODES = []
 # HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
-IMAGES_STORE = 'images'
-ROTATING_PROXY_LIST_PATH = 'proxies.txt'
+IMAGES_STORE = 'avito_images'
+# ROTATING_PROXY_LIST_PATH = 'proxies.txt'
