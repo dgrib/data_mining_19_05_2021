@@ -11,7 +11,6 @@ class InstagramSpider(scrapy.Spider):
     start_urls = ['https://www.instagram.com/accounts/login/']
     _login_path = '/accounts/login/ajax/'
     _tags_path = '/explore/tags/{tag}/'
-    # api_url = "/api/v1/"
     _api_url = '/api/v1/tags/{tag}/sections/'
 
     def __init__(self, login, password, tags, *args, **kwargs):
@@ -41,31 +40,49 @@ class InstagramSpider(scrapy.Spider):
         js_data = self.js_data_extract(response)
         insta_tag = InstaTag(js_data['entry_data']['TagPage'][0]['data'])
         yield insta_tag.get_tag_item()  # структура Tag
-        yield from insta_tag.get_article_items()  # собрать статьи с начальной страницы
+        yield from insta_tag.get_first_page_items()  # собрать статьи с начальной страницы
         # pagination
-
-        fd = {
-            'include_persistent': "0",
-            'max_id': insta_tag.variables['max_id'],
-            'page': str(insta_tag.variables['page']),
-            'surface': "grid",
-            'tab': "recent",
-            }
         yield scrapy.FormRequest(
-                'https://i.instagram.com/api/v1/tags/python/sections/',
-                formdata=fd,
-                method='POST',
-                cookies=response.request.cookies,
-                headers={
-                    'X-CSRFToken': js_data['config']['csrf_token'],
-                    'X-IG-App-ID': '936619743392459',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
-                },
-                callback=self._api_page_parse,
-            )
+            'https://i.instagram.com/api/v1/tags/python/sections/',
+            formdata={
+                'include_persistent': "0",
+                'max_id': insta_tag.variables['max_id'],
+                'page': str(insta_tag.variables['page']),
+                'surface': "grid",
+                'tab': "recent",
+            },
+            method='POST',
+            cookies=response.request.cookies,
+            headers={
+                'X-CSRFToken': js_data['config']['csrf_token'],
+                'X-IG-App-ID': '936619743392459',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+            },
+            callback=self._api_page_parse,
+        )
 
     def _api_page_parse(self, response):
-        print(1)
+        js_data = response.json()
+        insta_item = InstaOtherPageItem(js_data)
+        yield from insta_item.get_other_page_items()  # собрать статьи со 2,3... страниц
+        yield scrapy.FormRequest(
+            'https://i.instagram.com/api/v1/tags/python/sections/',
+            formdata={
+                'include_persistent': "0",
+                'max_id': insta_item.variables['max_id'],
+                'page': str(insta_item.variables['page']),
+                'surface': "grid",
+                'tab': "recent",
+            },
+            method='POST',
+            cookies=response.request.cookies,
+            headers={
+                'X-CSRFToken': js_data['config']['csrf_token'],
+                'X-IG-App-ID': '936619743392459',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+            },
+            callback=self._api_page_parse,
+        )
 
     def js_data_extract(self, response):
         js = response.xpath("//script[contains(text(), 'window._sharedData')]/text()").extract_first()
@@ -94,7 +111,22 @@ class InstaTag:
         item["data"] = data
         return item
 
-    def get_article_items(self):
+    def get_first_page_items(self):
         for section in self.tag_data['recent']['sections']:
             for media in section['layout_content']['medias']:
                 yield dict(date_parse=datetime.datetime.utcnow(), data=media['media'], item_type='article')
+
+    def get_other_page_items(self):
+        for section in self.tag_data['sections']:
+            for media in section['layout_content']['medias']:
+                yield dict(date_parse=datetime.datetime.utcnow(), data=media['media'], item_type='article')
+
+
+class InstaOtherPageItem(InstaTag):
+    def __init__(self, tag_data: dict):
+        # super().__init__(tag_data)
+        self.variables = {
+            "page": tag_data['next_page'],
+            "max_id": tag_data['next_max_id'],
+        }
+        self.tag_data = tag_data
