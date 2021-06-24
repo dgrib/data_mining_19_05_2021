@@ -1,13 +1,18 @@
+import datetime
+from urllib.parse import urlencode
+
 import scrapy
 import json
 
 
 class InstagramSpider(scrapy.Spider):
     name = 'instagram'
-    allowed_domains = ['www.instagram.com', 'instagram.com']  # Это разные домены
+    allowed_domains = ['www.instagram.com', 'instagram.com', 'i.instagram.com']  # Это разные домены
     start_urls = ['https://www.instagram.com/accounts/login/']
     _login_path = '/accounts/login/ajax/'
     _tags_path = '/explore/tags/{tag}/'
+    # api_url = "/api/v1/"
+    _api_url = '/api/v1/tags/{tag}/sections/'
 
     def __init__(self, login, password, tags, *args, **kwargs):
         super(InstagramSpider, self).__init__(*args, **kwargs)
@@ -18,31 +23,48 @@ class InstagramSpider(scrapy.Spider):
     def parse(self, response):
         try:
             js_data = self.js_data_extract(response)
-            # так как будет делать отправку запроса поэтому yield, будем отправлять какуюто форму
-            # указали на какой url должен происходить запрос, методом.. , колбэк какой будет обрабатывать ответ
             yield scrapy.FormRequest(
                 response.urljoin(self._login_path),
                 method='POST',
                 callback=self.parse,
-                formdata={
-                    "username": self.login,
-                    "enc_password": self.password,
-                    # остальные параметры не влияют на авторизацию
-                },
-                headers={
-                    'X-CSRFToken': js_data['config']['csrf_token'],
-                }
+                formdata={"username": self.login, "enc_password": self.password, },
+                headers={'X-CSRFToken': js_data['config']['csrf_token'], },
             )
         except AttributeError:
             r_data = response.json()
-            # response.json()
-            # {'user': True, 'userId': '47841367410', 'authenticated': True, 'oneTapPrompt': True, 'status': 'ok'}
             if r_data.get("authenticated"):
                 for tag in self.tags:
                     url = self._tags_path.format(tag=tag)
                     yield response.follow(url, callback=self.tag_page_parse)
 
     def tag_page_parse(self, response):
+        js_data = self.js_data_extract(response)
+        insta_tag = InstaTag(js_data['entry_data']['TagPage'][0]['data'])
+        yield insta_tag.get_tag_item()  # структура Tag
+        yield from insta_tag.get_article_items()  # собрать статьи с начальной страницы
+        # pagination
+
+        fd = {
+            'include_persistent': "0",
+            'max_id': insta_tag.variables['max_id'],
+            'page': str(insta_tag.variables['page']),
+            'surface': "grid",
+            'tab': "recent",
+            }
+        yield scrapy.FormRequest(
+                'https://i.instagram.com/api/v1/tags/python/sections/',
+                formdata=fd,
+                method='POST',
+                cookies=response.request.cookies,
+                headers={
+                    'X-CSRFToken': js_data['config']['csrf_token'],
+                    'X-IG-App-ID': '936619743392459',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+                },
+                callback=self._api_page_parse,
+            )
+
+    def _api_page_parse(self, response):
         print(1)
 
     def js_data_extract(self, response):
@@ -51,3 +73,28 @@ class InstagramSpider(scrapy.Spider):
         data = json.loads(js[start_idx: -1])
         return data
 
+
+class InstaTag:
+    def __init__(self, tag_data: dict):
+        self.variables = {
+            "tag_name": tag_data['name'],
+            "page": tag_data['recent']['next_page'],
+            "max_id": tag_data['recent']['next_max_id'],
+        }
+        self.tag_data = tag_data
+
+    def get_tag_item(self):
+        item = dict()
+        item['item_type'] = 'tag'
+        item['date_parse'] = datetime.datetime.utcnow()
+        data = {}
+        for key, value in self.tag_data.items():
+            if not (isinstance(value, dict) or isinstance(value, list)):
+                data[key] = value
+        item["data"] = data
+        return item
+
+    def get_article_items(self):
+        for section in self.tag_data['recent']['sections']:
+            for media in section['layout_content']['medias']:
+                yield dict(date_parse=datetime.datetime.utcnow(), data=media['media'], item_type='article')
