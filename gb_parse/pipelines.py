@@ -31,8 +31,8 @@ class GbMongoPipeline:
 
 class GbImageDownloadPipeline(ImagesPipeline):
     def get_media_requests(self, item, info):
-        for url in item.get('photos', []):
-            # TODO достать фото
+        for candidate in item['data']['image_versions2'].get('candidates', []):
+            url = candidate['url']
             yield Request(url)
 
     def item_completed(self, results, item, info):

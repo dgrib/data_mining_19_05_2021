@@ -5,7 +5,7 @@ from scrapy.settings import Settings
 # from .gb_parse.spiders.avito_spider.avito import AvitoSpider
 # from .gb_parse.spiders.instagram import InstagramSpider
 # from instagram_tags import InstagramTagsSpider, InstagramDataLoader
-from data_mining_19_05_2021.gb_parse.spiders.instagram import InstagramSpider
+from gb_parse.spiders.instagram import InstagramSpider
 
 
 if __name__ == '__main__':
