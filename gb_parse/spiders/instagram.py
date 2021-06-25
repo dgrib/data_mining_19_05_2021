@@ -12,6 +12,7 @@ class InstagramSpider(scrapy.Spider):
     _login_path = '/accounts/login/ajax/'
     _tags_path = '/explore/tags/{tag}/'
     _api_url = '/api/v1/tags/{tag}/sections/'
+    token = None
 
     def __init__(self, login, password, tags, *args, **kwargs):
         super(InstagramSpider, self).__init__(*args, **kwargs)
@@ -39,6 +40,7 @@ class InstagramSpider(scrapy.Spider):
     def tag_page_parse(self, response):
         js_data = self.js_data_extract(response)
         insta_tag = InstaTag(js_data['entry_data']['TagPage'][0]['data'])
+        self.token = js_data['config']['csrf_token']  # перезаписываем, так как хз - меняется или нет
         yield insta_tag.get_tag_item()  # структура Tag
         yield from insta_tag.get_first_page_items()  # собрать статьи с начальной страницы
         # pagination
@@ -54,7 +56,8 @@ class InstagramSpider(scrapy.Spider):
             method='POST',
             cookies=response.request.cookies,
             headers={
-                'X-CSRFToken': js_data['config']['csrf_token'],
+                'X-CSRFToken': self.token,
+                # TODO вытащить из request X-IG-App-ID
                 'X-IG-App-ID': '936619743392459',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
             },
@@ -77,7 +80,7 @@ class InstagramSpider(scrapy.Spider):
             method='POST',
             cookies=response.request.cookies,
             headers={
-                'X-CSRFToken': js_data['config']['csrf_token'],
+                'X-CSRFToken': self.token,
                 'X-IG-App-ID': '936619743392459',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
             },

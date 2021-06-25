@@ -73,7 +73,7 @@ DEFAULT_REQUEST_HEADERS = {
 ITEM_PIPELINES = {
     # 'gb_parse.pipelines.GbParsePipeline': 300,  # этоприоритет, чем легче тем выше приоритет
     'gb_parse.pipelines.GbMongoPipeline': 400,
-    # 'gb_parse.pipelines.GbImageDownloadPipeline': 300,
+    'gb_parse.pipelines.GbImageDownloadPipeline': 300,
 
 }
 
@@ -98,5 +98,5 @@ AUTOTHROTTLE_DEBUG = True
 # HTTPCACHE_IGNORE_HTTP_CODES = []
 # HTTPCACHE_STORAGE = 'scrapy.extensions.httpcache.FilesystemCacheStorage'
 
-IMAGES_STORE = 'avito_images'
+IMAGES_STORE = 'insta_images'
 # ROTATING_PROXY_LIST_PATH = 'proxies.txt'
