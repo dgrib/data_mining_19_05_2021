@@ -1,8 +1,18 @@
 import copy
-
 import scrapy
 import json
 from urllib.parse import urlencode
+"""
+Идея:
+1. following в инсте не более 5к - собираю их и сравниваю с followers - получаю список взаимных друзей первого польз.
+2. Заношу в базу (монго) как пользователя 0 порядка и список его друзей.
+3. Из списка друзей - беру пользователей (1 порядок) и ищу их взаимных друзей.
+4. Прохожу по списку друзей 1 порядка и формирую список друзей 2 порядка.
+5. Номер порядка и friend_path (цепочка id от начального до текущего пользователя) 
+    проставляю в каждом пользователе в базе.
+6. Так - пока не найду совпадение со вторым введенным пользователем.
+7. Получаю цепочку имен по цепочке id во friend_path.
+"""
 
 
 class InstaHandshakeSpider(scrapy.Spider):
@@ -14,16 +24,15 @@ class InstaHandshakeSpider(scrapy.Spider):
     _api_followers = 'https://i.instagram.com/api/v1/friendships/{user_id}/followers/'
     _token = None
     following_ids = set()
+    friends = set()
 
     api_followers_params = {
         'count': 12,
-        # 'max_id': None,
         'search_surface': 'follow_list_page',
     }
 
     api_following_params = {
         'count': 12,
-        # 'max_id': None,
     }
 
     def __init__(self, login, password, user_1, user_2, *args, **kwargs):
@@ -46,9 +55,7 @@ class InstaHandshakeSpider(scrapy.Spider):
         except AttributeError:
             r_data = response.json()
             if r_data.get("authenticated"):
-                # for tag in self.tags:
-                #     url = self._tags_path.format(tag=tag)
-                yield response.follow(f'/{self.user_1}/', callback=self.user_1_parse)
+                yield response.follow(f'/{self.user_1}/', callback=self.prepare_user_following)
 
     def js_data_extract(self, response):
         js = response.xpath("//script[contains(text(), 'window._sharedData')]/text()").extract_first()
@@ -56,54 +63,104 @@ class InstaHandshakeSpider(scrapy.Spider):
         data = json.loads(js[start_idx: -1])
         return data
 
-    def user_1_parse(self, response):
+    def prepare_user_following(self, response):
+        """Собирает данные со страницы пользователя и делает запрос на API"""
         js_data = self.js_data_extract(response)
-        user_id = js_data['entry_data']['ProfilePage'][0]['graphql']['user']['id']  # +
-        self._token = js_data['config']['csrf_token']  # +
-        params = copy.copy(self.api_following_params)  # +
+        user_id = js_data['entry_data']['ProfilePage'][0]['graphql']['user']['id']
+        self._token = js_data['config']['csrf_token']
+        params = copy.copy(self.api_following_params)
         yield response.follow(
-            # 'https://i.instagram.com/api/v1/friendships/305701719/followers/?count=12&search_surface=follow_list_page',
             self._api_following.format(user_id=user_id) + '?' + urlencode(params),
-            # cookies=response.request.cookies,
             headers={
-                # 'X-CSRFToken': self._token,
                 'X-IG-App-ID': '936619743392459',
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
-                # 'x-ig-set-www-claim': 'hmac.AR2sTVIYz2L-PYUhyVqqU7JHTlmLq1dNdiqDBlSQcIcfrYTl'
             },
-            callback=self.user_parse,
+            callback=self.following_count,
             cb_kwargs={
                 'user_id': user_id,
                 'quit_marker': False,
             },
         )
 
-    def user_parse(self, response, **cb_kwargs):
-        if cb_kwargs['quit_marker']:  # закончилась пегинация
-            yield self.next_user()
+    def following_count(self, response, **cb_kwargs):
+        """Наполняет множество following_ids"""
+        if cb_kwargs['quit_marker']:  # если закончилась пегинация, выходим
+            params = self.api_followers_params
+            yield response.follow(
+                self._api_followers.format(user_id=cb_kwargs['user_id']) + '?' + urlencode(params),
+                callback=self.get_user_friends,
+                headers={
+                    'X-IG-App-ID': '936619743392459',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+                },
+                cb_kwargs={
+                    'user_id': cb_kwargs['user_id'],
+                    'quit_marker': False,
+                },
+            )
         else:
             js = response.json()
-            # наполняем множество following
+            # наполняем множество following_ids
             for user in js['users']:
                 self.following_ids.add((user.get('pk'), user['username']))
             params = copy.copy(self.api_following_params)
-            params['max_id'] = js['next_max_id']
+            params['max_id'] = js.get('next_max_id', None)
             quit_marker = True if not js['big_list'] else False  # False если меньше 12 пользователей приходит
             yield response.follow(
                 self._api_following.format(user_id=cb_kwargs['user_id']) + '?' + urlencode(params),
-                # cookies=response.request.cookies,
                 headers={
-                    # 'X-CSRFToken': self._token,
                     'X-IG-App-ID': '936619743392459',
                     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
-                    # 'x-ig-set-www-claim': 'hmac.AR2sTVIYz2L-PYUhyVqqU7JHTlmLq1dNdiqDBlSQcIcfrYTl'
                 },
-                callback=self.user_parse,
+                callback=self.following_count,
                 cb_kwargs={
                     'user_id': cb_kwargs['user_id'],
                     'quit_marker': quit_marker,
                 },
             )
 
-    def next_user(self):
-        print(1)
+    def get_user_friends(self, response, **cb_kwargs):
+        """получает followers по 12, если из них ктото есть в following - то считаем их взаимно-друзьями"""
+        if cb_kwargs['quit_marker']:
+            insta_user = InstaUser(self.friends, **cb_kwargs)
+            yield insta_user.get_user_item()
+            print(1)
+
+        else:
+            js = response.json()
+            # наполняем множество friends
+            for user in js['users']:
+                user_set = (user.get('pk'), user.get('username'))
+                if user_set in self.following_ids:
+                    self.friends.add(user_set)  # заменить на словарь ????? в базе лучше словарь, чем set
+
+            params = copy.copy(self.api_followers_params)
+            params['max_id'] = js.get('next_max_id', None)
+            quit_marker = True if not js['big_list'] else False  # False если меньше 12 пользователей приходит
+            yield response.follow(
+                self._api_followers.format(user_id=cb_kwargs['user_id']) + '?' + urlencode(params),
+                headers={
+                    'X-IG-App-ID': '936619743392459',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:89.0) Gecko/20100101 Firefox/89.0',
+                },
+                callback=self.get_user_friends,
+                cb_kwargs={
+                    'user_id': cb_kwargs['user_id'],
+                    'quit_marker': quit_marker,
+                },
+            )
+
+
+class InstaUser:
+    def __init__(self, friends, **cb_kwargs):
+        self.user_id = cb_kwargs['user_id']
+        self.handshake_path = [cb_kwargs['user_id'], ]
+        self.friends_set = *friends,  # хз почему приходит tuple вместо set, пришлось сделать *
+
+    def get_user_item(self, ):
+        item = dict()
+        item['user_id'] = self.user_id
+        item['handshake_path'] = self.handshake_path
+        item['friend_generation'] = 0
+        item['friends_dict'] = self.friends_set
+        return item
