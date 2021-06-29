@@ -21,6 +21,6 @@ class GbMongoPipeline:
         self.db = client[BOT_NAME]
 
     def process_item(self, item, spider):
-        collection_name = f"{spider.name}_{item.get('item_type', '')}"
+        collection_name = f"{spider.name}"
         self.db[collection_name].insert_one(item)
         return item

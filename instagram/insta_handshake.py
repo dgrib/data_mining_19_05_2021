@@ -2,6 +2,8 @@ import copy
 import scrapy
 import json
 from urllib.parse import urlencode
+from .settings import BOT_NAME
+from pymongo import MongoClient
 """
 Идея:
 1. following в инсте не более 5к - собираю их и сравниваю с followers - получаю список взаимных друзей первого польз.
@@ -124,6 +126,8 @@ class InstaHandshakeSpider(scrapy.Spider):
         if cb_kwargs['quit_marker']:
             insta_user = InstaUser(self.friends, **cb_kwargs)
             yield insta_user.get_user_item()
+            mongo_reader = MongoReader()
+            yield mongo_reader.read_next_user_generation(spider=InstaHandshakeSpider)
             print(1)
 
         else:
@@ -132,6 +136,8 @@ class InstaHandshakeSpider(scrapy.Spider):
             for user in js['users']:
                 user_set = (user.get('pk'), user.get('username'))
                 if user_set in self.following_ids:
+                    # if user.get('username') == self.user_2:  # вывести цепочку друзей - если нашли user_2
+                    #     return
                     self.friends.add(user_set)  # заменить на словарь ????? в базе лучше словарь, чем set
 
             params = copy.copy(self.api_followers_params)
@@ -164,3 +170,19 @@ class InstaUser:
         item['friend_generation'] = 0
         item['friends_dict'] = self.friends_set
         return item
+
+
+class MongoReader:
+    def __init__(self):
+        client = MongoClient()
+        self.db = client[BOT_NAME]
+
+    def read_next_user_generation(self, spider, generation=0):
+        """Читает из базы всех друзей определенного поколения"""
+        collection_name = f"{spider.name}_"
+        for item in self.db[collection_name].find({'friend_generation': generation}):
+            print(item)
+            # сделать yield всех друзей определенного поколения - заполнить базу их друзьями, поколение + 1
+        # yield read_next_user_generation(следующее поколение)
+        print(1)
+

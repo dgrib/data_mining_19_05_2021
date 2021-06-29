@@ -14,7 +14,7 @@ if __name__ == '__main__':
         login=os.getenv("LOGIN"),
         password=os.getenv("PASSWORD"),
         # user_1=input(),
-        user_1='off.soffia',
+        user_1='morenosoccerskills',
         # user_2=input(),
         user_2='timatiofficial',
     )
